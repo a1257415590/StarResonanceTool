@@ -3,6 +3,7 @@
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using static StarResonanceTool.PkgEntryReader.Program;
 using static StarResonanceTool.ProtoModule;
@@ -12,15 +13,64 @@ using Google.Protobuf.Reflection;
 
 namespace StarResonanceTool;
 
+internal class Config
+{
+	public string PkgPath { get; set; } = String.Empty;
+	public string OutputPath { get; set; } = String.Empty;
+	public string DummyDllPath { get; set; } = String.Empty;
+	public bool ExtractAssetBundles { get; set; } = false;
+	public bool ProcessAllEntries { get; set; } = false;
+}
+
 internal class MainApp
 {
 	public static Dictionary<uint, PkgEntry> entries = new Dictionary<uint, PkgEntry>();
-	public static readonly string filePath = @"E:\StarLauncher\game\publish_apjcbt_1.0\game_mini\Star_Data\StreamingAssets\container\meta.pkg";
-	public static readonly string basePath = @"E:\StarLauncher\game\publish_apjcbt_1.0\game_mini\Star_Data\StreamingAssets\container";
-	public static readonly string dummyDllPath = @"C:\Users\hiro\Documents\Il2CppDumper\Il2CppDumper\bin\Debug\net8.0\sr2\DummyDll";
-
+	public static string containerPath = string.Empty;
+	
 	public static void Main(string[] args)
 	{
+		// Parse command line arguments
+		var config = ParseArguments(args);
+		if (config == null)
+		{
+			PrintUsage();
+			return;
+		}
+
+		containerPath = Path.GetDirectoryName(config.PkgPath)!;
+		string filePath = config.PkgPath;
+		string basePath = config.OutputPath;
+		string dummyDllPath = config.DummyDllPath;
+
+		// Display configuration
+		Console.WriteLine("StarResonanceTool Configuration:");
+		Console.WriteLine($"  PKG File: {filePath}");
+		Console.WriteLine($"  Output Directory: {basePath}");
+		Console.WriteLine($"  DummyDll Directory: {dummyDllPath}");
+		Console.WriteLine($"  Extract Asset Bundles: {config.ExtractAssetBundles}");
+		Console.WriteLine($"  Process All Entries: {config.ProcessAllEntries}");
+		Console.WriteLine();
+
+		// Validate paths
+		if (!File.Exists(filePath))
+		{
+			Console.Error.WriteLine($"Error: PKG file not found: {filePath}");
+			return;
+		}
+
+		if (!Directory.Exists(dummyDllPath))
+		{
+			Console.Error.WriteLine($"Error: DummyDll directory not found: {dummyDllPath}");
+			return;
+		}
+
+		// Create output directory if it doesn't exist
+		if (!Directory.Exists(basePath))
+		{
+			Directory.CreateDirectory(basePath);
+			Console.WriteLine($"Created output directory: {basePath}");
+		}
+
 		entries = PkgEntryReader.Program.InitPkg(filePath);
 		var settings = new JsonSerializerSettings() { Converters = { new StringEnumConverter() } };
 		//File.WriteAllText("entries.json", JsonConvert.SerializeObject(entries, Formatting.Indented, settings));
@@ -46,6 +96,10 @@ internal class MainApp
 		Directory.CreateDirectory(Path.Combine(basePath, "bundles"));
 		Directory.CreateDirectory(Path.Combine(basePath, "luas"));
 		Directory.CreateDirectory(Path.Combine(basePath, "unk"));
+		// Apply filtering based on configuration
+
+		if (!config.ProcessAllEntries)
+			return;
 
 		Console.WriteLine("Generating the rest of output...");
 
@@ -54,18 +108,14 @@ internal class MainApp
 			uint key = kv.Key;
 			PkgEntry entry = kv.Value;
 
-			if (key != 1952927057 &&
-				key != 2697780389 &&
-				key != 621018379
-			) continue;
-
 			byte[] data = ReadFromEntry(entry);
 
 			string outputPath;
 			if (StartsWith(data, "UnityFS")) // assetbundles, those are NOT in m0.pkg
 			{
 				outputPath = Path.Combine(basePath, "bundles", $"{key}.ab");
-				continue; // we don't need that, comment out if you do
+				if (!config.ExtractAssetBundles)
+					continue; // skip asset bundles unless explicitly requested
 			}
 			else if (StartsWith(data, new byte[] { 0x1B, 0x4C, 0x75, 0x61 })) // Lua
 			{
@@ -88,6 +138,87 @@ internal class MainApp
 
 		// if you already have them split
 		LuaModule.RenameLuas(basePath);
+	}
+
+	private static Config? ParseArguments(string[] args)
+	{
+		var config = new Config();
+		
+		for (int i = 0; i < args.Length; i++)
+		{
+			switch (args[i].ToLower())
+			{
+				case "-h":
+				case "--help":
+					return null;
+				
+				case "-p":
+				case "--pkg":
+					if (i + 1 >= args.Length)
+					{
+						Console.Error.WriteLine("Error: --pkg requires a file path");
+						return null;
+					}
+					config.PkgPath = args[++i];
+					break;
+				
+				case "-o":
+				case "--output":
+					if (i + 1 >= args.Length)
+					{
+						Console.Error.WriteLine("Error: --output requires a directory path");
+						return null;
+					}
+					config.OutputPath = args[++i];
+					break;
+				
+				case "-d":
+				case "--dll":
+					if (i + 1 >= args.Length)
+					{
+						Console.Error.WriteLine("Error: --dll requires a directory path");
+						return null;
+					}
+					config.DummyDllPath = args[++i];
+					break;
+				
+				case "-a":
+				case "--assetbundles":
+					config.ExtractAssetBundles = true;
+					break;
+				
+				case "--all":
+					config.ProcessAllEntries = true;
+					break;
+				
+				default:
+					Console.Error.WriteLine($"Error: Unknown argument '{args[i]}'");
+					return null;
+			}
+		}
+		
+		return config;
+	}
+	
+	private static void PrintUsage()
+	{
+		Console.WriteLine("StarResonanceTool - Extract and process game assets");
+		Console.WriteLine();
+		Console.WriteLine("Usage: StarResonanceTool.exe [options]");
+		Console.WriteLine();
+		Console.WriteLine("Options:");
+		Console.WriteLine("  -h, --help              Show this help message");
+		Console.WriteLine("  -p, --pkg <path>        Path to the meta.pkg file");
+		Console.WriteLine("  -o, --output <path>     Output directory path");
+		Console.WriteLine("  -d, --dll <path>        Path to DummyDll directory");
+		Console.WriteLine("  -k, --keys <keys>       Comma-separated list of entry keys to process");
+		Console.WriteLine("  -a, --assetbundles      Extract asset bundles (default: skip)");
+		Console.WriteLine("  --all                   Process all entries (ignores key filtering)");
+		Console.WriteLine();
+		Console.WriteLine("Examples:");
+		Console.WriteLine("  StarResonanceTool.exe --pkg \"C:\\game\\meta.pkg\" --output \"C:\\output\"");
+		Console.WriteLine("  StarResonanceTool.exe --keys \"1952927057,2697780389\" --assetbundles");
+		Console.WriteLine("  StarResonanceTool.exe --all --output \"C:\\extracted\"");
 	}
 
 	private static void DumpProtoFromBin(byte[] data)

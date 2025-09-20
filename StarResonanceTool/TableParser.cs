@@ -29,7 +29,6 @@ internal class TableParser
 
 		PkgEntry pkgEntry = MainApp.entries[hash];
 		byte[] data = ReadFromEntry(pkgEntry);
-		File.WriteAllBytes($"Files/{name}.bytes", data); // Saves the raw data for 
 
 		Console.WriteLine($"Parsing data for '{name}' ({data.Length} bytes)...");
 

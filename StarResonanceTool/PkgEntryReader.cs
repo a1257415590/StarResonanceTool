@@ -83,7 +83,7 @@ public class Program
 
 	public static byte[] ReadFromEntry(PkgEntry entry)
 	{
-		string containerPath = Path.Combine(MainApp.basePath, $"m{entry.Index}.pkg");
+		string containerPath = Path.Combine(MainApp.containerPath, $"m{entry.Index}.pkg");
 
 		if (!File.Exists(containerPath))
 			return [];
