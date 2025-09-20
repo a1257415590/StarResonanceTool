@@ -62,3 +62,6 @@ output/
 - .NET 8.0 or later
 - Il2CppDumper DummyDll files for proper table parsing
 - Access to the game's PKG files
+
+### Disclaimer
+Bokura owns the original assets to the game, all credits go to its rightful owner. I am not liable for any damages caused if you get banned from using a mod created by this tool, or its derivatives. I DO NOT CLAIM ANY RESPONSIBILITY FOR ANY USAGE OF THIS SOFTWARE, THE SOFTWARE IS MADE 100% FOR EDUCATIONAL PURPOSES ONLY
