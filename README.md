@@ -34,7 +34,6 @@ StarResonanceTool.exe --pkg "C:\game\meta.pkg" --dll "C:\Il2CppDumper\DummyDll" 
 **Extract everything including asset bundles:**
 ```bash
 StarResonanceTool.exe --all --assetbundles --dll "C:\Il2CppDumper\DummyDll" --output "C:\full_extraction"
-``
 ```
 
 ### Output Structure
