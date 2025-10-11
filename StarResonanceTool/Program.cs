@@ -10,6 +10,7 @@ using static StarResonanceTool.ProtoModule;
 using System.Reflection.PortableExecutable;
 using Mono.Cecil;
 using Google.Protobuf.Reflection;
+using System.Text;
 
 namespace StarResonanceTool;
 
@@ -26,7 +27,14 @@ internal class MainApp
 {
 	public static Dictionary<uint, PkgEntry> entries = new Dictionary<uint, PkgEntry>();
 	public static string containerPath = string.Empty;
-	
+
+	public static string defaultlang = "english"; // can change to chinese
+
+	public static KeyValuePair<int, int>[] Indexes = [];
+	public static string[] AllLocalizationStrings = [];
+	public static Dictionary<int, int> FlowConflict = [];
+	public static Dictionary<int, int> ManualConflict = [];
+
 	public static void Main(string[] args)
 	{
 		// Parse command line arguments
@@ -81,14 +89,18 @@ internal class MainApp
 		ModuleDefinition metaData = AssemblyDefinition.ReadAssembly(Path.Combine(dummyDllPath, "Panda.Table.dll"), readerParams).MainModule;
 		TypeDefinition LoaderType = metaData.GetType("Panda.TableInitUtility").NestedTypes.First(t => t.Name == "<>c");
 
+		byte[] cnBytes = ReadFromEntry(entries[HashModule.Hash33($"{defaultlang}.bytes")]);
+		LoadLocalizationFromStream(new MemoryStream(cnBytes));
+
 		foreach (MethodDefinition method in LoaderType.Methods)
 		{
 			if (!method.IsAssembly)
 				continue;
+			//	continue;
 			TableParser parser = new TableParser();
 			string tableName = string.Join("", method.ReturnType.Name.SkipLast(4));
 			TypeDefinition targetType = method.ReturnType.Resolve();
-			//if (targetType.Name == "AwardTableBase")
+			//if (tableName != "MonsterTable")
 			//	continue;
 			parser.ParseFromName(tableName, targetType);
 		}
@@ -138,6 +150,57 @@ internal class MainApp
 
 		// if you already have them split
 		LuaModule.RenameLuas(basePath);
+	}
+
+	public static void LoadLocalizationFromStream(Stream stream)
+	{
+		using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
+
+		// Read number of index pairs
+		int indexCount = reader.ReadInt32();
+		Indexes = new KeyValuePair<int, int>[indexCount];
+
+		for (int i = 0; i < indexCount; i++)
+		{
+			int key = reader.ReadInt32();
+			int value = reader.ReadInt32();
+			Indexes[i] = new KeyValuePair<int, int>(key, value);
+		}
+
+		// Read localization strings
+		int stringCount = reader.ReadInt32();
+		AllLocalizationStrings = new string[stringCount];
+
+		for (int i = 0; i < stringCount; i++)
+		{
+			AllLocalizationStrings[i] = reader.ReadString();
+		}
+
+		// Read flowConflict dictionary
+		int flowConflictCount = reader.ReadInt32();
+		if (flowConflictCount > 0)
+		{
+			FlowConflict = new Dictionary<int, int>(flowConflictCount);
+			for (int i = 0; i < flowConflictCount; i++)
+			{
+				int key = reader.ReadInt32();
+				int value = reader.ReadInt32();
+				FlowConflict[key] = value;
+			}
+		}
+
+		// Read manualConflict dictionary
+		int manualConflictCount = reader.ReadInt32();
+		if (manualConflictCount > 0)
+		{
+			ManualConflict = new Dictionary<int, int>(manualConflictCount);
+			for (int i = 0; i < manualConflictCount; i++)
+			{
+				int key = reader.ReadInt32();
+				int value = reader.ReadInt32();
+				ManualConflict[key] = value;
+			}
+		}
 	}
 
 	private static Config? ParseArguments(string[] args)

@@ -9,6 +9,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using System.Reflection;
 using System.Diagnostics.Metrics;
+using StarResonanceTool;
 
 public class ZMemory_SpanReader_o
 {
@@ -97,7 +98,19 @@ public class ZMemory_SpanReader_o
 	// Helpers that still use arrays because pools are arrays
 	private string ReadStringFromPool(byte[] pool, int index)
 	{
-		if (index + 2 > pool.Length) return "";
+		if (index + 2 > pool.Length)
+		{
+			KeyValuePair<int, int> firstentry = MainApp.Indexes.FirstOrDefault(i => i.Key == index);
+
+			if (firstentry.Key == index)
+			{
+				return MainApp.AllLocalizationStrings[firstentry.Value];
+			}
+			else
+			{
+				return "";
+			}
+		};
 		short len = BitConverter.ToInt16(pool, index);
 		if (len < 0 || index + 2 + len > pool.Length) return "";
 		return Encoding.UTF8.GetString(pool, index + 2, len);
@@ -154,29 +167,41 @@ public class ZMemory_SpanReader_o
 		for (int i = 0; i < subIndices.Length; i++)
 		{
 			strings[i] = ReadStringFromPool(strPool, subIndices[i]);
-		}
-		;
+		};
 		return strings;
 	}
 
-	public string[] ReadStringArrayFromPool(byte[] pool, int index)
+	public string[] ReadStringArrayFromPool(byte[] pool, byte[] strpool, int index)
 	{
-		if (index + 2 > pool.Length) return Array.Empty<string>();
-		short len = BitConverter.ToInt16(pool, index);
-		if (len <= 0) return Array.Empty<string>();
+		short count = BitConverter.ToInt16(pool, index);
+		if (count <= 0) return Array.Empty<string>();
 
-		using var reader = new BinaryReader(new MemoryStream(pool));
-		reader.BaseStream.Seek(index + 2, SeekOrigin.Begin);
+		int offset = index + 2;
 
-		string[] result = new string[len];
-		for (int i = 0; i < len; i++)
+		int[] positions = new int[count];
+		for (int i = 0; i < count; i++)
 		{
+			int pos = BitConverter.ToInt32(pool, offset + i * 4);
+			//Console.WriteLine(pos);
+			positions[i] = pos;
+		}
+
+		string[] result = new string[count];
+		for (int i = 0; i < count; i++)
+		{
+			int strIndex = positions[i];
+
+			using var reader = new BinaryReader(new MemoryStream(strpool));
+			reader.BaseStream.Seek(strIndex, SeekOrigin.Begin);
+
+			// keep original per-string reading logic
 			if (reader.BaseStream.Position + 2 > reader.BaseStream.Length) break;
 			short strLen = reader.ReadInt16();
 			if (reader.BaseStream.Position + strLen > reader.BaseStream.Length) break;
 			byte[] strBytes = reader.ReadBytes(strLen);
 			result[i] = Encoding.UTF8.GetString(strBytes);
 		}
+
 		return result;
 	}
 
@@ -214,47 +239,115 @@ public class ZMemory_SpanReader_o
 		return ReadIntTableFromPool(loader.IntArrayPool._memory.ToArray(), index);
 	}
 
-	public string[] ReadStringTripleArray(Bokura_Table_ZLoader_o loader)
+	public string[][] ReadStringTripleArray(Bokura_Table_ZLoader_o loader)
 	{
 		int start = ReadInt32();
 
-		return [];
+		byte[] intArrayPool = loader.IntArrayPool._memory.ToArray();
+		byte[] stringPool = loader.StringPool._memory.ToArray();
 
-		//byte[] intArrayPool = loader.IntArrayPool._memory.ToArray();
-		//byte[] stringPool = loader.StringPool._memory.ToArray();
+		List<string[]> strings = new List<string[]>();
 
-		//List<string> strings = new List<string>();
+		short len = BitConverter.ToInt16(intArrayPool, start);
 
-		//int cursor = start;
+		int entriesStart = start + 2;
+		int bytesNeeded = len * 4;
 
-		//for (int i = 0; i < 3; i++) // TRIPLE array
-		//{
-		//	// need at least 2 bytes for length
-		//	if (cursor + 2 > intArrayPool.Length)
-		//	{
-		//		Console.WriteLine($"[i={i}] Out of bounds reading length at {cursor}.");
-		//		break;
-		//	}
+		for (int j = 0; j < len; j++)
+		{
+			int strArrIndex = BitConverter.ToInt32(intArrayPool, entriesStart + j * 4);
 
-		//	short len = BitConverter.ToInt16(intArrayPool, cursor);
-		//	Console.WriteLine($"[i={i}] arrayLen {len}");
+			if (strArrIndex <= 0)
+				break;
 
-		//	List<string[]> strings1 = new();
+			short count = BitConverter.ToInt16(intArrayPool, strArrIndex);
 
-		//	int entriesStart = cursor + 2;
-		//	int bytesNeeded = len * 4;
+			int offset = strArrIndex + 2;
 
-		//	for (int j = 0; j < len; j++)
-		//	{
-		//		int strArrIndex = BitConverter.ToInt32(intArrayPool, entriesStart + j * 4);
-		//		Console.WriteLine($"[i={i}][j={j}] strArrIndex {strArrIndex}");
-		//	}
+			for (int a = 0; a < count; a++)
+			{
+				int pos = BitConverter.ToInt32(intArrayPool, offset + a * 4);
+				strings.Add(ReadStringArrayFromPool(intArrayPool, stringPool, pos));
+			}
+		}
 
-		//	// advance cursor to the next array header
-		//	cursor = entriesStart + bytesNeeded; // cursor += 2 + len*4
-		//}
+		return strings.ToArray();
+	}
 
-		//return strings.ToArray();
+	public Dictionary<int, int> ReadKVIntInt(Bokura_Table_ZLoader_o loader)
+	{
+		int index = ReadInt32();
+		Dictionary<int, int> ret = new();
+
+		byte[] intintPool = loader.MapIntIntPool._memory.ToArray();
+
+		short tableLen = BitConverter.ToInt16(intintPool, index);
+
+		if (tableLen <= 0)
+			return ret;
+
+		for (int i = 0; i < tableLen; i++)
+		{
+			int keypos = index + 2 + i * 4;
+			int valpos = index + 2 + (i+1) * 4;
+
+			int key = BitConverter.ToInt32(intintPool, keypos);
+			int val = BitConverter.ToInt32(intintPool, valpos);
+
+			ret[key] = val;
+		}
+
+		return ret;
+	}
+
+	public string[][] ReadMLStringTable(Bokura_Table_ZLoader_o loader)
+	{
+		int index = ReadInt32();
+
+		byte[] intArrayPool = loader.IntArrayPool._memory.ToArray();
+
+		short tableLen = BitConverter.ToInt16(intArrayPool, index);
+
+		List<string[]> ret = new List<string[]>();
+
+		if (tableLen <= 0)
+			return Array.Empty<string[]>();
+
+		for (int i = 0; i < tableLen; i++)
+		{
+			int ipos = index + 2 + i * 4;
+			int readPos = BitConverter.ToInt32(intArrayPool, ipos);
+
+			short arrayLength = BitConverter.ToInt16(intArrayPool, readPos);
+
+			string[] result = new string[arrayLength];
+
+			if (arrayLength <= 0)
+				continue;
+
+			for (int j = 0; j < arrayLength; j++)
+			{
+				int pos = readPos + 2 + j * 4;
+				int hash = BitConverter.ToInt32(intArrayPool, pos);
+
+				KeyValuePair<int, int> firstentry = MainApp.Indexes.FirstOrDefault(i => i.Key == hash);
+
+				if (firstentry.Key == hash)
+				{
+					result[j] = MainApp.AllLocalizationStrings[firstentry.Value];
+				}
+				else
+				{
+					result[j] = "";
+				}
+			}
+
+			ret.Add(result);
+		}
+
+		return ret.ToArray();
+
+		//return [];
 	}
 
 	public float[][] ReadNumberTable(Bokura_Table_ZLoader_o loader)
@@ -342,7 +435,7 @@ public class ZMemory_SpanReader_o
 		}
 		for (int i = 0; i < arrayLength; i++)
 		{
-			
+
 		}
 		return [];
 	}
@@ -398,7 +491,7 @@ public class ZMemory_SpanReader_o
 		return result;
 	}
 
-	public int[] ReadMLStringArray(Bokura_Table_ZLoader_o loader)
+	public string[] ReadMLStringArray(Bokura_Table_ZLoader_o loader)
 	{
 		int index = ReadInt32();
 
@@ -406,16 +499,26 @@ public class ZMemory_SpanReader_o
 
 		short arrayLength = BitConverter.ToInt16(intArrayPool, index);
 
-		int[] result = new int[arrayLength];
+		string[] result = new string[arrayLength];
 
 		if (arrayLength <= 0)
-			return Array.Empty<int>();
+			return Array.Empty<string>();
 
 		for (int i = 0; i < arrayLength; i++)
 		{
 			int pos = index + 2 + i * 4;
 			int hash = BitConverter.ToInt32(intArrayPool, pos);
-			result[i] = hash;
+
+			KeyValuePair<int,int> firstentry = MainApp.Indexes.FirstOrDefault(i => i.Key == hash);
+
+			if (firstentry.Key == hash)
+			{
+				result[i] = MainApp.AllLocalizationStrings[firstentry.Value];
+			}
+			else
+			{
+				result[i] = "";
+			}
 		}
 
 		return result;

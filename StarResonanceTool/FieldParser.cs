@@ -99,27 +99,32 @@ internal class FieldParser
 				break;
 			case "Bokura.Table.MLStringArray":
 				value = reader.ReadMLStringArray(loader);
-				totalForRow += 4; // ???
+				totalForRow += 4;
 				break;
 			case "Bokura.Table.Int32Table":
 				value = reader.ReadInt32Table(loader);
-				totalForRow += 4; // ???
+				totalForRow += 4;
 				break;
 			case "Bokura.Table.StringTable":
 				value = reader.ReadStringTable(loader);
-				totalForRow += 4; // ???
+				totalForRow += 4;
 				break;
 			case "Bokura.Table.NumberTable":
 				value = reader.ReadNumberTable(loader);
-				totalForRow += 4; // ???
+				totalForRow += 4;
 				break;
-
-			// special ones ig?
 			case "Bokura.Table.StringTripleArray":
 				value = reader.ReadStringTripleArray(loader);
-				totalForRow += 4; // ???
+				totalForRow += 4;
 				break;
-
+			case "Bokura.Table.MLStringTable":
+				value = reader.ReadMLStringTable(loader);
+				totalForRow += 4;
+				break;
+			case "Bokura.Table.KVIntInt":
+				value = reader.ReadKVIntInt(loader);
+				totalForRow += 4;
+				break;
 
 			default:
 				throw new NotImplementedException($"Type {prop.PropertyType.FullName} not implemented yet");

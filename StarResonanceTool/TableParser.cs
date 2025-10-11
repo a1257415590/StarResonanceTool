@@ -15,7 +15,6 @@ internal class TableParser
 
 	public void ParseFromName(string name, TypeDefinition targetType)
 	{
-
 		uint hash = HashModule.Hash33(name + ".ctb");
 
 		if (!MainApp.entries.ContainsKey(hash))
@@ -29,6 +28,8 @@ internal class TableParser
 
 		PkgEntry pkgEntry = MainApp.entries[hash];
 		byte[] data = ReadFromEntry(pkgEntry);
+
+		//File.WriteAllBytes($"{name}.bin", data);
 
 		Console.WriteLine($"Parsing data for '{name}' ({data.Length} bytes)...");
 
