@@ -28,7 +28,7 @@ internal class MainApp
 	public static Dictionary<uint, PkgEntry> entries = new Dictionary<uint, PkgEntry>();
 	public static string containerPath = string.Empty;
 
-	public static string defaultlang = "english"; // can change to chinese
+	public static string defaultlang = "chinese"; // can change to chinese
 
 	public static KeyValuePair<int, int>[] Indexes = [];
 	public static string[] AllLocalizationStrings = [];
